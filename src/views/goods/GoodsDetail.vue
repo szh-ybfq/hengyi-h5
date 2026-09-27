@@ -1,5 +1,11 @@
 <template>
   <div class="detail-page">
+    <!-- 顶部：返回按钮栏 -->
+    <div class="detail-header">
+      <div class="back-icon" @click="goBack">
+        <van-icon name="arrow-left" size="22" />
+      </div>
+    </div>
     <!-- 顶部详情轮播 van‑swiper 自动2秒切换 -->
     <van-swipe
       v-model:active="swipeActiveIndex"
@@ -15,25 +21,27 @@
         />
       </van-swipe-item>
     </van-swipe>
-
     <!-- 图片预览组件：预览轮播图片数组，打开预览停止轮播，关闭恢复 -->
     <van-image-preview
       v-model:show="showPreview"
       :images="goodsInfo.detailImgList"
       :start-position="previewStartIndex"
       @close="onPreviewClose"
-    />
-
+    >
+      <template #overlay>
+        <div class="preview-close-wrap">
+          <van-icon name="cross" size="26" @click="showPreview = false"/>
+        </div>
+      </template>
+    </van-image-preview>
     <div class="info">
       <h2>{{goodsInfo.spuName}}</h2>
       <p class="price">¥{{goodsInfo.price}}</p>
     </div>
-
     <!-- 商品参数板块 -->
     <div class="param-section">
       <h3>商品描述</h3>
       <p class="desc-text">{{goodsInfo.spuDescription}}</p>
-
       <h3>商品参数</h3>
       <!-- paramImgList 一行一张图片竖向摆放 -->
       <div class="param-img-list">
@@ -46,16 +54,13 @@
         />
       </div>
     </div>
-
     <!--猜你喜欢占位板块，后续对接接口-->
     <div class="like-section">
       <h3>猜你喜欢</h3>
       <div>TODO 商品列表</div>
     </div>
-
     <!--给页面增加底部padding，防止内容被固定栏遮挡-->
     <div class="placeholder-bottom"></div>
-
     <!-- 底部固定栏 -->
     <div class="bottom-bar">
       <div class="left-group">
@@ -74,7 +79,6 @@
       </div>
       <van-button type="danger" class="btn-pin" @click="openSpecPopup">发起拼单</van-button>
     </div>
-
     <!--更多弹出面板 action‑sheet -->
     <van-action-sheet
       v-model:show="showMorePopup"
@@ -82,14 +86,41 @@
       cancel-text="取消"
       @select="onMenuSelect"
     />
-    <!-- 规格选择弹窗 -->
+    <!-- 规格选择弹窗 【改版】 -->
     <van-popup v-model:show="showSpecPopup" position="bottom">
       <div class="spec-wrap">
         <h3>选择款式</h3>
-        <div class="spec-item" v-for="item in specList" :key="item.id" @click="selectSpec(item)">
-          {{item.name}}
+        <!--=====新增头部区域：选中SKU图片+价格=====-->
+        <div class="spec-header">
+          <van-image
+            v-if="selectedSku"
+            :src="selectedSku.skuImgUrl"
+            width="100"
+            height="100"
+            fit="cover"
+          />
+          <div class="spec-header-info">
+            <div v-if="selectedSku" class="spec-price">¥{{selectedSku.price}}</div>
+            <div v-else class="tip-text">请选择规格</div>
+          </div>
         </div>
-        <van-button block type="danger" class="confirm-btn" @click="confirmPin">确定</van-button>
+        <!--SKU列表，循环goodsInfo.skuList-->
+        <div
+          class="spec-item"
+          v-for="(sku, idx) in goodsInfo.skuList"
+          :key="idx"
+          :class="{active: selectedSku === sku}"
+          @click="selectSkuItem(sku)"
+        >
+          {{ formatSkuText(sku) }}
+        </div>
+        <van-button
+          block
+          type="danger"
+          class="confirm-btn"
+          :disabled="!selectedSku"
+          @click="confirmPin"
+        >确定</van-button>
       </div>
     </van-popup>
   </div>
@@ -101,11 +132,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { getGoodsDetail } from '@/api/goods'
 const route = useRoute()
 const router = useRouter()
-
-//商品详情数据 VO: detailImgList、paramImgList
+//商品详情数据 VO: detailImgList、paramImgList、skuList
 const goodsInfo = ref({
   detailImgList: [],
-  paramImgList: []
+  paramImgList: [],
+  skuList: []
 })
 //轮播
 const swipeActiveIndex = ref(0)
@@ -114,11 +145,12 @@ const isAutoPlay = ref(true)
 //图片预览
 const showPreview = ref(false)
 const previewStartIndex = ref(0)
-
 //更多菜单弹窗
 const showMorePopup = ref(false)
 //拼单规格弹窗
 const showSpecPopup = ref(false)
+//选中sku对象
+const selectedSku = ref(null)
 //是否收藏状态
 const isCollected = ref(false)
 const moreActions = ref([
@@ -126,16 +158,52 @@ const moreActions = ref([
   { name: '回到首页', value: 'home' },
   { name: '帮助与反馈', value: 'feedback' }
 ])
-const specList = ref([
-  {id:1,name:"【含油宿舍10件套推荐】生抽+油400ml"},
-  {id:2,name:"【含油超值宿舍7件套】油+盐+酱+醋"}
-])
-const selectedSpec = ref(null)
+
+/**
+ * 将sku的specPairList转成展示文本，例如：容量:400ml，类型:生抽
+ * @param {Object} sku
+ */
+function formatSkuText(sku){
+  if(!sku.specPairList || sku.specPairList.length ===0) return ""
+  const arr = []
+  sku.specPairList.forEach(pair=>{
+    const k = pair.key?.trim()
+    const v = pair.value?.trim()
+    if(k && v){
+      arr.push(`${k}:${v}`)
+    }
+  })
+  return arr.join("，")
+}
+
+//打开规格弹窗，每次打开清空选中
+const openSpecPopup = ()=>{
+  selectedSku.value = null
+  showSpecPopup.value=true
+}
+//点击选择sku
+const selectSkuItem = (sku)=>{
+  selectedSku.value = sku
+}
+//确认拼单
+const confirmPin = ()=>{
+  console.log("确认拼单选中sku", selectedSku.value)
+  showSpecPopup.value=false
+}
 
 const loadDetail = async () => {
   const res = await getGoodsDetail(route.params.spuId)
   goodsInfo.value = res.data.data || {}
   console.log('商品详情', goodsInfo.value)
+}
+//返回逻辑：优先回退历史；无历史跳首页
+const goBack = ()=>{
+  //history长度大于1代表存在上一页
+  if(window.history.length > 1){
+    router.back()
+  }else{
+    router.push('/')
+  }
 }
 //打开预览，传入当前点击图片下标，停止自动轮播
 const openImgPreview = (idx)=>{
@@ -166,22 +234,32 @@ const handleCollect = ()=>{
   isCollected.value = !isCollected.value
   console.log("点击收藏",isCollected.value)
 }
-const openSpecPopup = ()=>{
-  showSpecPopup.value=true
-}
-const selectSpec = (item)=>{
-  selectedSpec.value = item
-}
-const confirmPin = ()=>{
-  console.log("确认拼单",selectedSpec.value)
-  showSpecPopup.value=false
-}
+
 onMounted(()=>{
   loadDetail()
 })
 </script>
 
 <style scoped>
+.detail-header{
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  z-index:99;
+  padding:10px;
+  box-sizing:border-box;
+}
+.back-icon{
+  width:36px;
+  height:36px;
+  background:rgba(0,0,0,0.25);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#fff;
+}
 .info{
   padding:12px;
 }
@@ -246,15 +324,46 @@ onMounted(()=>{
 }
 .spec-wrap{
   padding:20px;
-  min-height:320px;
+  min-height:420px;
+}
+/*规格弹窗头部*/
+.spec-header{
+  display:flex;
+  gap:16px;
+  padding-bottom:16px;
+  border-bottom:1px solid #eee;
+  margin-bottom:12px;
+}
+.spec-header-info{
+  display:flex;
+  align-items:center;
+}
+.spec-price{
+  font-size:22px;
+  color:red;
+}
+.tip-text{
+  color:#999;
 }
 .spec-item{
   border:1px solid #ccc;
   border-radius:6px;
-  padding:10px;
+  padding:12px;
   margin:8px 0;
+}
+/*选中高亮样式*/
+.spec-item.active{
+  border-color:#ee0a24;
+  background:#fff2f2;
 }
 .confirm-btn{
   margin-top:20px;
+}
+:deep(.preview-close-wrap){
+  position: fixed;
+  top:16px;
+  left:16px;
+  z-index:99999;
+  color:#fff;
 }
 </style>

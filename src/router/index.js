@@ -63,6 +63,12 @@ export const constantRoutes= [
     name: 'GoodsDetail',
     component: GoodsDetail,
     meta: { showTab: false }
+  },
+  {
+    path: '/search',
+    name: 'Search',
+    component: () => import('@/views/home/Search.vue'),
+    meta: { showTab: false } // 不展示底部tab栏
   }
 ]
 const router = createRouter({

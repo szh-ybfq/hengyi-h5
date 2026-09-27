@@ -1,13 +1,14 @@
 <template>
   <div class="home-page" style="padding-bottom:60px">
     <!-- 顶部：搜索 + 分类，固定在页面上方 -->
-    <van-search
-      v-model="searchKey"
-      placeholder="搜索商品名称"
-      shape="round"
-      @search="onSearch"
-      @clear="onClearSearch"
-    />
+    <div class="search-wrap" @click="goSearchPage">
+      <van-search
+        :model-value="''"
+        placeholder="搜索商品名称"
+        shape="round"
+        readonly
+      />
+    </div>
     <!-- 一级分类横向滚动 -->
     <div class="category-scroll-wrap">
       <!-- 固定首页选项，写死在最前面 -->
@@ -127,20 +128,8 @@ const handleChildCategoryClick = (cid) => {
   finished.value = false
   onLoadGoods()
 }
-// 搜索触发
-const onSearch = () => {
-  pageNum.value = 1
-  goodsList.value = []
-  finished.value = false
-  onLoadGoods()
-}
-// 清除搜索框
-const onClearSearch = () => {
-  searchKey.value = ''
-  pageNum.value = 1
-  goodsList.value = []
-  finished.value = false
-  onLoadGoods()
+const goSearchPage = ()=>{
+  router.push('/search')
 }
 // 商品分页加载，传分类id给后端
 const onLoadGoods = async () => {
